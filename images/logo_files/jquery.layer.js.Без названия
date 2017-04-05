@@ -1,0 +1,619 @@
+/**
+ * jquery-layer
+ * Copyright (c) 2012 shepik@gmail.com
+ * based on jmpopups
+ * Copyright (c) 2009 Otavio Avila (http://otavioavila.com)
+ * Licensed under GNU Lesser General Public License
+ * @docs http://jmpopups.googlecode.com/
+ * @version 0.5.1
+ * 
+ */
+
+define(['jquery', './Observable', 'underscore', 'js2/env'], function($, Observable, _, env) {
+
+	window.jquery_layer_opts = _.extend({css:null, q: []}, window.jquery_layer_opts||{});
+
+	if (window.jquery_layer_opts.q) setTimeout(function() {
+		var q = window.jquery_layer_opts.q;
+		window.jquery_layer_opts.q = [];
+		_.each(q, function(args) {
+			window.create_layer.apply(null,args);
+		});
+	},0);
+
+	var loadCss = function(cb) {
+		if (!window.jquery_layer_opts.css) {
+			cb();
+			return;
+		}
+		// create elem to check
+		var need = document.createElement('div');
+		need.id = 'layerLoad';
+		document.body.appendChild(need);
+		
+		$('head').append(window.jquery_layer_opts.css);
+
+		var count = 0;
+		var max = 100;
+		
+		var check = function() {
+			if(count > max || $(need).css('visibility') == 'hidden') {
+				window.jquery_layer_opts.css = null;
+				cb();
+			} else {
+				setTimeout(function(){
+					count++;
+					check();
+				}, 50);
+			}
+		};
+		check();
+	};
+
+	window.create_layer = function(name, settings) {
+		loadCss(function() {
+			LayerClass.instance(name, settings);
+		});
+		return true;
+	};
+
+	/**
+	 * Конструктор лаера
+	 * @param name     Имя лаера
+	 * @param settings Настройки лаера
+	 * @constructor
+	 */
+	var LayerClass = window.LayerClass = function(name, settings) {
+		if ($('#layer_'+name).length)
+			throw "layer " + name + " already exists";
+
+		this.name = name;  // Имя лаера
+		this.id = "layer_" + this.name; // ID лаера
+		this.node = null; // jQuery объект лаера
+		this.settings = settings || {};
+
+		// Сохраняем объект лаера в хранилище
+		LayerClass.items.push(this);
+
+		// Записываем настройки в объект
+		$.extend(this, window.LayerClass.defaultSettings, this.settings);
+		
+		// Добавляем методов для подписки на события
+		_.extend(this, new Observable());
+
+		// Стартуем лаер
+		this.init();
+	};
+
+	window.LayerClass.defaultSettings = {
+		width: "auto",
+		height: "auto",
+		created: false,
+		parameters: {}, // Параметры шаблона лаера
+		url: '/layer/%name%/',  // URL генерации шаблона, %name% - будет заменено при запросе на имя лаера
+		tpl: null,				// Шаблон лаера
+		usecache: true,			//использовать ли кэш для содержимого лаера
+		is_mobile: env.is_mobile,// мобильная версия
+		offset: env.is_phone ? 0 : 5,				// page offset
+		padding: 0,
+		wrapper: '#wrapper',	// контейнер с контентом
+		
+		closeable: true,			// лаер можно закрыть
+		closeByScreenlocker: true,
+		popstate: false,
+
+		zIndex: 10999,
+		
+		// Callback-фукнции
+		beforeShow: function() {},
+		afterShow: function() {},
+		beforeClose: function(closeStatus) {},
+		afterClose: function(closeStatus) {}
+	};
+	
+	/* Члены класса (static) */
+	LayerClass.zIndex = 10999;
+	
+
+	/**
+	 * Кэш скомпилированных шаблонов лаеров (хэш-таблица)
+	 * Ключом является имя лаера + значения параметров, т.е. можно использовать один и тот же лаер
+	 * с разными шаблонами
+	 */
+	LayerClass.cache = {};
+
+	/**
+	 * Хранилище всех созданных объектов лаеров (стэк)
+	 */
+	LayerClass.items = [];
+
+	/**
+	 * Создать объект лаера
+	 * @param name Имя лаера
+	 * @param settings Настройки лаера
+	 * @returns {LayerClass}
+	 */
+	LayerClass.create = function(name, settings) {
+		return new LayerClass(name, settings);
+	};
+
+	/**
+	 * Получить объект лаера
+	 * Если лаер с данным именем уже существует он и вернется, если нет - создастся новый
+	 *
+	 * @param name Имя лаера
+	 * @param settings Настройки лаера
+	 * @returns {LayerClass} Объект лаера
+	 */
+	LayerClass.instance = function(name, settings) {
+		var layer = LayerClass.find(name);
+		if(!layer) layer = LayerClass.create(name, settings);
+
+		return layer;
+	};
+
+	/**
+	 * Получить лаер из хранилища по его имени
+	 * @param   name Имя лаера
+	 * @returns LayerClass | undefined
+	 */
+	LayerClass.find = function(name) {
+		for (var i = 0; i < LayerClass.items.length; i++) {
+			if (LayerClass.items[i].name == name) {
+				return LayerClass.items[i];
+			}
+		}
+	};
+
+	/**
+	 * Получить последний лаер из хранилища
+	 * @returns LayerClass | null
+	 */
+	LayerClass.findLast = function() {
+		if (!LayerClass.items.length) return null;
+		return LayerClass.items[LayerClass.items.length-1];
+	};
+
+	/**
+	 * Удалить объект лаера из хранилища
+	 * @param obj Объект лаера
+	 */
+	LayerClass.remove = function(obj) {
+		var items = LayerClass.items;
+		LayerClass.items = [];
+		for (var i = 0; i < items.length; i++) {
+			if (items[i] != obj) LayerClass.items.push(items[i]);
+		}
+	};
+
+	/**
+	 * Выполнить функцию для всех лаеров в хранилище
+	 * @param callback
+	 */
+	LayerClass.forEach = function(callback) {
+		var items = LayerClass.items;
+		for (var i = 0; i < items.length; i++) {
+			callback(items[i]);
+		}
+	};
+
+	/* Члены объекта (object) */
+
+	/**
+	 * Стартуем лаер
+	 * - Формируем шаблон или берем из кэша
+	 * - Показываем лаер
+	 */
+	LayerClass.prototype.init = function() {
+		this.zIndex = LayerClass.zIndex++;
+		
+		// Запускаем блокировщик
+		window.screenLocker.show();
+
+		// Ключ хранения шаблона (имя лаера + значения параметров лаера)
+		var cache_key = this.name + '_' + (this.url||'');
+		if (this.parameters) {
+			for (var i in this.parameters) {
+				cache_key += '_' + this.parameters[i];
+			}
+		}
+		
+		// Если мобильная версия, то применяем особые настройки
+		(function(layer){
+			if(!layer.is_mobile) {
+				return;
+			}
+			
+			var $meta = $('[name=viewport]');
+			var viewport = $meta.attr('content');
+			
+			var scrollTo = 0;
+			
+			function setViewport(_width, _height) {
+				var window_width = $(window).width();
+				var window_height = $(window).height();
+
+				var width = _width || 520;
+				var height = _height || 520;
+				
+				var width_scale = window_width/(width+10);
+				var height_scale = window_height/(height+10);
+
+				var newport = viewport
+					//.replace(/(width=)(\d+)/, '$1' + width)
+					.replace(/(maximum-scale=)([\d\.]+)/, '$1' + Math.min(width_scale, height_scale, 1.5))
+					//.replace(/(initial-scale=)(\d+)/, '$1' + Math.min(width_scale, height_scale, 1.5));
+				//	.replace(/(scale=)(\d+)/, '$1' + 0.5)
+				//	.replace(/(minimum-scale=)(\d+)/, '$1' + 0.2);
+
+				$meta.attr('content', newport);
+				return newport;
+			}
+			
+			layer.on('beforeShow', function(){
+				scrollTo = $(window).scrollTop();
+			});
+			
+			layer.on('afterShow', function(){
+				setViewport(layer.wrap_div.outerWidth(), layer.wrap_div.outerHeight());
+				$(document.body).addClass('layer-exclusivity');
+				$(layer.wrapper).addClass('get-out');
+			});
+			
+			layer.on('beforeClose', function(){
+				$meta.attr('content', viewport);
+				$(layer.wrapper).removeClass('get-out');
+				$(document.body).removeClass('layer-exclusivity');
+			});
+			layer.on('afterClose', function(){
+				$(window).scrollTop(scrollTo);
+			});
+		})(this);
+
+		this.beforeShow(this);
+		this.trigger('beforeShow');
+
+		if(this.popstate) {
+			window.history.pushState({ layer: this.name, settings: JSON.stringify(this.settings) }, null, window.location.href);
+		}
+
+		// Шаблон уже есть - показываем
+		if (this.tpl) {
+			this.show();
+		// Шаблон есть в кэше - показываем
+		} else if (typeof(LayerClass.cache[cache_key]) != 'undefined') {
+			this.tpl = LayerClass.cache[cache_key];
+			this.show();
+		// Шаблон есть в виде отдельного элемента - показываем
+		} else if ($('#layer_'+this.name+'_tpl').length) {
+			this.tpl = $('#layer_'+this.name+'_tpl');
+			
+			if(!this.created) {
+				this.tpl = this.tpl.html();
+			}
+			
+			this.show();
+		// Шаблона нет - запрашиваем его - показываем
+		} else {
+			var layer = this;
+			
+			$.get(this.url.replace('%name%', this.name), this.parameters, function(res) {
+				res = $.trim(res);
+				if (layer.usecache) LayerClass.cache[cache_key] = res;
+				layer.tpl = res;
+				layer.show();
+			});
+		}
+	};
+
+	LayerClass.prototype.setCloseable = function(_bool) {
+		var closeable = !!_bool;
+		this.closeable = closeable;
+		if (closeable) {
+			this.$closeLayer.show();
+		} else {
+			this.$closeLayer.hide();
+		}
+	};
+
+	/**
+	 * Закрыть лаер
+	 * - Удаляем jQuery-объект лаера из DOM
+	 * - Удаляем лаер из хранилища
+	 * - Фокусируемся на предыдущем лаере
+	 *
+	 * @returns LayerClass закрытый лаер
+	 */
+	LayerClass.prototype.close = function(closeStatus) {
+		if (!this.con) return this;
+
+		if (this.closed) return this;
+
+		if (this.beforeClose(closeStatus) === false) {
+			return this;
+		}
+		this.trigger('beforeClose', [closeStatus]);
+		var layer = this;
+
+		function closefunc() {
+			layer.scroll_div.remove();
+			layer.afterClose(closeStatus);
+			layer.trigger('afterClose', [closeStatus]);
+			layer.closed = true;
+			$(window).trigger('height');
+		}
+
+		this.con.hide();
+
+		if (layer.change_url && layer.url && layer.previous_url) {
+			history.replaceState(null, null, layer.previous_url);
+			layer.previous_url = null;
+		}
+
+		closefunc();
+		LayerClass.remove(this);
+
+		// Возвращаем скролл страницы
+		if (!LayerClass.items.length) {
+			$('body').removeClass('admin-open-layer');
+			$(this.wrapper).css('marginTop', '');
+			$('html, body').css('overflow', '');
+			window.scrollTo(0, this.scrollTop);
+		}
+		if(this.popstate) {
+			$(window).off('popstate.layer' + this.name);
+		}
+		window.screenLocker.hide();
+		return this;
+	};
+
+	LayerClass.prototype.setFullSpace = function() {
+		this.con.css({
+			left: '',
+			top: ''
+		});
+		this.con.addClass('layer-fullspace-mode');
+	};
+
+	/**
+	 * Обновляем позицию лаера в соответсвии с размерами окна
+	 */
+	LayerClass.prototype.setPosition = function () {
+		if (!this.con) return false;
+		if (this.fullscreen_enabled){
+			this.setFullSpace();
+			return;
+		}
+
+		var
+			window_width = $(window).width(),
+			window_height = $(window).height(),
+			node_width = this.wrap_div.width(),
+			node_height =  this.wrap_div.height();
+
+		var positionType = 'fixed';
+
+		// Рассчитываем позицию
+		var leftPosition;
+		if (node_width + this.offset*2 < window_width) {
+			leftPosition = (document.documentElement.offsetWidth - node_width) / 2;
+		} else {
+			leftPosition = this.offset;
+		}
+
+		var topPosition = (window_height - node_height) / 2;
+		
+		if(node_height + this.offset*2 > window_height) {
+			positionType = 'absolute';
+			topPosition = $(window).scrollTop()*1 + this.offset;
+		}
+
+		var positions = {
+			position: positionType,
+			left: leftPosition + "px",
+			top: topPosition + "px"
+		};
+
+		// SUPER HACK! @TODO: для лаеров в админке, переделать нормально
+		var real_width = window_width - this.offset*2 - this.padding*2;
+		positions['max-width'] = real_width;
+		if(this.padding && (node_width + this.offset*2 + this.padding*2 > window_width)) {
+			positions.left = this.offset + this.padding;
+		}
+		
+		this.con[node_height < window_height ? 'addClass' : 'removeClass']('layer-less-than');
+		this.con[node_height < window_height ? 'removeClass' : 'addClass']('layer-more-than');
+		
+		this.con.css(positions);
+	};
+
+	/**
+	 * Показать лаер
+	 */
+
+	var scroll_div_sample = $('<div class="layer-content-scroll"><!-- --></div>');
+	var layer_con_sample = $('<div class="layer-container hidden"><!-- --></div>');
+	var wrap_div_sample = $("<div class='layer-content-wrap'></div>");
+
+	LayerClass.prototype.useFullScreen = function() {
+		this.fullscreen_enabled = true;
+		this.setFullSpace();
+	};
+
+	LayerClass.prototype.show = function() {
+		var layer = this;
+
+		var content_node = $(this.tpl).filter('*'); //отфильтровываем ноды комментариев
+		if(content_node.filter('[data-layer-offset]').length) this.offset = content_node.filter('[data-layer-offset]').data('layerOffset'); // @TODO: сделать нормально, нужно для лаеров в админке
+		if(content_node.filter('[data-layer-padding]').length) this.padding = content_node.filter('[data-layer-padding]').data('layerPadding'); // @TODO: сделать нормально, нужно для лаеров в админке
+
+		if(this.created) {
+			this.scroll_div = content_node.find('.layer-content-scroll').css({
+				zIndex: this.zIndex
+			});
+			this.con = content_node.find('.layer-container');
+			this.wrap_div = content_node.find('.layer-content-wrap').attr('id', this.id);
+			this.node = this.wrap_div;
+			content_node.attr('style', '');
+		} else {
+			this.scroll_div = scroll_div_sample.clone().css({
+				position: 'fixed',
+				top: 0,
+				left: 0,
+				width: '100%',
+				height: '100%',
+				overflow: 'auto',
+				zIndex: this.zIndex
+			}).appendTo(document.body);
+			this.con = layer_con_sample.clone().appendTo(this.scroll_div);
+			this.wrap_div = wrap_div_sample.clone().attr('id', this.id).appendTo(this.con);
+			this.node = this.wrap_div;
+
+			// Выставлям CSS
+			this.con.css({
+				width: this.width == "auto" ? "" : this.width + "px",
+				height: this.height == "auto" ? "" : this.height + "px",
+				position: "fixed",
+				"z-index": this.zIndex
+			});
+			content_node.addClass('layer-content');
+			this.wrap_div.append(content_node);
+			this.con.removeClass('hidden');
+		}
+
+		this.scroll_div.on('click', function(e){
+			var $target = $(e.target);
+
+			if($target.closest('.layer-close').length) {
+				if (layer.closeable) layer.close();
+				return false;
+			}
+
+			if(!$target.closest(layer.con).length) {
+				if (layer.closeByScreenlocker && layer.closeable) layer.close();
+				return false;
+			}
+		});
+
+		// изменение истории браузера
+		if(this.popstate) {
+			$(window).on('popstate.layer' + this.name, function(e){
+				if (layer.closeable) layer.close();
+			});
+		}
+
+		// Блокируем скролл страницы и запоминаем позицию скролла
+		if (LayerClass.items.length == 1) {
+			$('body').addClass('admin-open-layer');
+			this.scrollTop = $(window).scrollTop();
+			$(this.wrapper).css('marginTop', -this.scrollTop + 'px');
+			$('body').css('overflow', 'hidden');
+			$('html').css('overflow-y', 'scroll');
+		}
+		// Получаем jQuery объект контейнера
+		this.setPosition();
+		this.content_node = content_node;
+		this.con.show();
+
+		if (layer.change_url && layer.url) {
+			layer.previous_url = window.location.href;
+			history.replaceState(null, null, layer.url);
+		}
+
+		// Триггер
+		this.afterShow(this);
+		this.trigger('afterShow');
+
+		// Обработчик закрытия лаера
+		this.$closeLayer = $('.layer-close', this.wrap_div);
+		this.setCloseable(this.closeable);
+		this.closed = false;
+
+		// set layer zoom
+		/*
+		(function(layer) {
+			var lw = layer.node.width();
+			var lh = layer.node.height();
+			var ww = $(window).width();
+			var wh = $(window).height();
+			
+			if (lw > ww || lh > wh) {
+				layer.node.css('zoom', Math.min(ww/lw, wh/lh));
+			}
+		}(this));
+		*/
+	};
+
+
+	/**
+	 * Блокировщик экрана c ленивой инициализацией
+	 * - Нужен для показа лаеров
+	 * - Один на все лаеры
+	 * - Создается когда нужно
+	 * - При показе очередного лаера увеличивает Z-индекс, при скрытии лаера уменьшает индекс
+	 * - Когда лаеров уже нет скрывается
+	 */
+	window.screenLocker = {
+		counter: 0, // Счетчик блокировок
+		node: null, // jQuery объект блокировщика
+
+		/**
+		 * Показать блокировщик
+		 */
+		show: function() {
+			// JQuery элемент блокировщика уже создан
+			if (this.node) {
+				this.counter++;
+				if (this.counter == 1) { // Показываем первый раз
+					this.node.show();
+				}
+				// Увеличиваем z-index
+				var layer = LayerClass.findLast();
+				this.node.css("z-index", layer.zIndex);
+
+			// JQuery элемента блокировщка нет - создаем его
+			} else {
+				this.node = $("#popupLayerScreenLocker");
+				
+				if(!this.node.length) {
+					this.node = $('<div id="popupLayerScreenLocker"></div>');
+					$('body').append(this.node);
+				}
+				
+				this.show();
+			}
+		},
+
+		/**
+		 * Скрыть блокировщик
+		 */
+		hide : function() {
+			if(this.counter === 0) return;
+			
+			this.counter--;
+			if (this.counter === 0) {
+				this.node.hide();
+			} else {
+				var layer = LayerClass.findLast();
+				this.node.css("z-index", layer.zIndex);
+			}
+		}
+	};
+
+	// onResize - Обновить размеры блокировщика и лаеров
+	$(window).on('resize.layer', function(e){
+		LayerClass.forEach(function(item){ item.setPosition(); });
+	});
+
+	// onKeyDown - По нажатию escape закрыть последний открытый лаер
+	$(document).on('keydown.layer', function(e){
+		var item = LayerClass.findLast();
+		if (item) {
+			switch(e.keyCode) {
+				case 27: // "escape"
+					if (item.closeable) item.close();
+				break;
+			}
+		}
+	});
+});

@@ -1,0 +1,69 @@
+/**
+ * Global error handler
+ * @author Petr Vyazovetskiy <anotherpit@gmail.com>
+ * @copyright Zoon.Ru, 2014
+ */
+!function(){
+	"use strict";
+
+	var count = 0;
+	var limit = 2;
+	var old = window.onerror || null;
+
+	var jqRequire = function(cb){
+		'function' === typeof jQuery ? setTimeout(function(){ cb(jQuery) }, 0) : require([ 'jquery' ], cb);
+	};
+
+	/**
+	 * Error handler
+	 *
+	 * @param {string} message
+	 * @param {string} url
+	 * @param {number} line
+	 * @param {number} [column]
+	 * @param {Error} [error]
+	 *
+	 * @see http://msdn.microsoft.com/en-us/library/windows/apps/hh699850.aspx
+	 * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Error/stack
+	 */
+	function onError(message, url, line, column, error) {
+		if(navigator && navigator.userAgent.match(/yabrowser\/(\d+\.\d+)/i) && message == 'Script error.') {
+			return;
+		}
+		
+		console.log('here', arguments);
+		count++;
+		
+		if (count <= limit) {
+			var trace = error && error.stack || null;
+			var timestamp = window.page_load_start && ((new Date() - page_load_start) / 1000) || 0;
+
+			jqRequire(function($){
+				$.post('/js.php', {
+					area   : 'misc',
+					action : 'jsError',
+					message: message,
+					url    : url,
+					line   : line,
+					trace  : trace,
+					ts     : timestamp
+				});
+			});
+		}
+
+		return true;
+	}
+
+	/**
+	 * Get the number of errors collected so far
+	 * @returns {number}
+	 */
+	onError.count = function() {
+		return count;
+	};
+
+	// Set and expose the handler
+	window.onerror = onError;
+
+	'function' === typeof define && define.amd && define('js2/trace', [], function(){ return onError });
+}();

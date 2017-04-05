@@ -1,0 +1,244 @@
+define(['jquery', 'underscore', './Observable', 'js2/env'], function($, _, Observable, env){
+	var BalloonClass = function(name, options) {
+		var opts = options || {};
+		
+		var params = {
+			id: 'balloon_' + name,
+			name: name,
+			node: null,
+			target: null,
+			parameters: {},
+			offset: 0,
+			visible: false,
+			positionAuto: true,
+			zIndex: 11111,
+			url: '/layer/balloon_%name%/',
+			tpl: null,
+			rerender: true,
+			usecache: true
+		};
+		
+		_.extend(this, new Observable(), params, opts);
+		
+		this.init();
+	};
+	
+	if(!window.global_balloon_cache) window.global_balloon_cache = {};
+	
+	BalloonClass.cache = window.global_balloon_cache;
+	
+	BalloonClass.items = [];
+	
+	BalloonClass.create = function(name, options) {
+		return new BalloonClass(name, options);
+	};
+
+	BalloonClass.instance = function(name, options) {
+		var balloon = BalloonClass.find(name, options);
+		if(!balloon) balloon = BalloonClass.create(name, options);
+		return balloon;
+	};
+	
+	BalloonClass.find = function(name, options) {
+		var opts = options || {};
+		for (var i = 0; i < BalloonClass.items.length; i++) {
+			if (BalloonClass.items[i].name == name && $.param(opts.parameters) == $.param(BalloonClass.items[i].parameters)) {
+				return BalloonClass.items[i];
+			}
+		}
+	};
+
+	BalloonClass.findLast = function() {
+		if (!BalloonClass.items.length) return null;
+		return BalloonClass.items[BalloonClass.items.length-1];
+	};
+	
+	BalloonClass.remove = function(obj) {
+		var items = BalloonClass.items;
+		BalloonClass.items = [];
+		for (var i = 0; i < items.length; i++) {
+			if (items[i] != obj) BalloonClass.items.push(items[i]);
+		}
+	};
+
+	BalloonClass.forEach = function(callback) {
+		var items = BalloonClass.items;
+		for (var i = 0; i < items.length; i++) {
+			callback && callback(items[i]);
+		}
+	};
+	
+	BalloonClass.getCacheKey = function(obj) {
+		var self = obj;
+		var cache_key = self.name + '_' + (self.url || '');
+		
+		if (self.parameters) {
+			for (var i in self.parameters) {
+				cache_key += '_' + self.parameters[i];
+			}
+		}
+		
+		return cache_key;
+	};
+	
+	BalloonClass.setPosition = function($node, $target, params) {
+		params = params || {};
+		params.zIndex = params.zIndex || 11111;
+		params.offset = params.offset || 0;
+		
+		var nodeWidth = $node.outerWidth();
+		if(!nodeWidth) nodeWidth = $node.children().outerWidth();
+		
+		var ww = $(window).width();
+		var w = $target.outerWidth();
+		var h = $target.outerHeight();
+		var offset = $target.offset();
+		var top = offset.top + h;
+		var left = Math.min(ww - nodeWidth - params.offset, Math.max(params.offset, offset.left - nodeWidth/2 + w/2));
+		
+		$node.css({
+			position: 'absolute',
+			zIndex: params.zIndex,
+			top: top,
+			left: left
+		}).find('.balloon-arrow').css({
+			left: offset.left - left + w/2
+		});
+	};
+	
+	BalloonClass.prototype = {
+		init: function(){
+			var self = this;
+			self.node = $('<div />').hide().attr('id', self.id).addClass('balloon-position-auto');
+			self.$target = $(self.target);
+			
+			self.$target.off('click').on('click', function(e){
+				e.preventDefault();
+				self.toggle();
+			});
+		},
+		getContent: function(callback){
+			var self = this;
+			var cache_key = BalloonClass.getCacheKey(self);
+			
+			if (BalloonClass.cache.hasOwnProperty(cache_key)) {
+				var data = BalloonClass.cache[cache_key];
+				var content = $(data).filter('*');
+				callback && callback(content);
+			} else {
+				$.get(self.url.replace('%name%', self.name), self.parameters, function(data) {
+					data = $.trim(data);
+					if (self.usecache) BalloonClass.cache[cache_key] = data;
+					var content = $(data).filter('*');
+					callback && callback(content);
+				});
+			}
+		},
+		prepare: function() {
+			var self = this;
+			var $node = self.$target.closest('.js-balloon-target');
+
+			if(!$node.length) {
+				$node = $(document.body);
+			} else {
+				self.node.removeClass('balloon-position-auto');
+				self.positionAuto = false;
+			}
+
+			self.node.appendTo($node);
+		},
+		show: function() {
+			var self = this;
+			self.prepare();
+			
+			if(self.rerender && self.node.children().length) {
+				self.node.empty();
+			}
+
+			if(!self.node.children().length) {
+				self.getContent(function(content){
+					self.node.empty().append(content);
+					self._show();
+				});
+				return;
+			}
+			
+			self._show();
+		},	
+		_show: function() {
+			var self = this;
+			BalloonClass.forEach(function(balloon){
+				balloon.close();
+			});
+			
+			BalloonClass.items.push(self);
+			
+			$(document).off('click.balloonClose').on('click.balloonClose', function(e){
+				var $t = $(e.target);
+				var close = $t.closest($('.balloon-close', self.node)).length;
+				
+				if(!$t.closest(self.$target).length && !$t.closest(self.node).length || close) {
+					if(close) e.preventDefault();
+					$(document).off('click.balloonClose', arguments.callee);
+					self.close();
+				}
+			});
+
+			self.trigger('beforeShow');
+			self.setPosition();
+			self.node.show();
+			self.visible = true;
+			self.trigger('afterShow');
+			
+			if(self.target) {
+				self.$target.addClass('active dropped');
+			}
+		},
+		close: function() {
+			var self = this;
+			self.trigger('beforeClose');
+			self.node.hide().remove();
+			self.visible = false;
+			self.trigger('afterClose');
+			BalloonClass.remove(self);
+			
+			if(self.target) {
+				self.$target.removeClass('active dropped');
+			}
+		},
+		toggle: function(){
+			var self = this;
+			self.visible = !self.visible;
+			self[self.visible ? 'show' : 'close']();
+		},
+		setPosition: function() {
+			if(!this.target || !this.positionAuto) return;
+			
+			BalloonClass.setPosition(this.node, this.$target, {
+				zIndex: this.zIndex,
+				offset: this.offset
+			});
+		}
+	};
+	
+	// onResize - Обновить размеры блокировщика и лаеров
+	$(window).on('resize.balloon', _.debounce(function(e){
+		BalloonClass.forEach(function(item){
+			item.setPosition();
+		});
+	}, 0));
+	
+	// onKeyDown - По нажатию escape закрыть последний открытый лаер
+	$(document).on('keydown.balloon', function(e){
+		var item = BalloonClass.findLast();
+		if (item) {
+			switch(e.keyCode) {
+				case 27: // "escape"
+					item.close();
+				break;
+			}
+		}
+	});
+	
+	return BalloonClass;
+});
