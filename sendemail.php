@@ -1,7 +1,9 @@
 <?php
 $name       = @trim(stripslashes($_POST['name'])); 
 $from       = @trim(stripslashes($_POST['email'])); 
-$to   		= 'ssvovsl@mail.ru';//replace with your email
+$subject    = @trim(stripslashes($_POST['subject'])); 
+$message    = @trim(stripslashes($_POST['message'])); 
+$to   		= 'ssvovs@mail.ru';//replace with your email
 
 $headers   = array();
 $headers[] = "MIME-Version: 1.0";

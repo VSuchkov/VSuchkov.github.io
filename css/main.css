@@ -185,21 +185,17 @@ section {
   transition-property: opacity;
   background-repeat: no-repeat;
   background-size: cover;
+  background-position: center center;
   background-position-y: -200px;
+  background-image: url(../images/header-bg.jpg);
+  min-height: 600px;
 }
 
-.carousel-fade .carousel-inner .item:after {
-  content: " ";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-}
+
 
 .carousel-fade .carousel-inner .active {
   opacity: 1;
-  background-image: url(../images/header-bg.jpg);
+  
   height: 600px;
 }
 .carousel-fade .carousel-inner .active.left,
@@ -314,8 +310,6 @@ section {
 }
 
 .our-services .col-sm-4 {
-  border-right:1px solid #f2f2f2;
-  border-bottom:1px solid #f2f2f2;
   padding-bottom: 50px;
 }
 
@@ -334,6 +328,15 @@ section {
 .service-info h3 {
   margin-top: 35px;
 }
+
+.our-services .row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  flex-wrap: wrap;
+
+}
+
 
 /*************************
 ********About CSS*******

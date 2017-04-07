@@ -30,6 +30,11 @@
 	.btn-signup {
 		padding: 10px 20px;
 	}
+	.carousel-fade .carousel-inner .item {
+		background: url(../images/header-bg-mobile.jpg) no-repeat;
+		background-size: cover;
+		min-height: 785px;
+	}
 }
 
 /* xs */
@@ -75,6 +80,13 @@
 		padding-bottom: 8px;
 		padding-top: 10px;
 	}
+	.carousel-fade .carousel-inner .item {
+		background: url(../images/header-bg-mobile.jpg) no-repeat;
+		background-size: contain;
+		background-position-x: 50%;
+		min-height: 785px;
+	}
+
 
 	/*services*/
 	section {
@@ -93,6 +105,10 @@
 	.our-services .col-sm-4 {
 		margin-bottom: 32px;
 		padding-bottom: 20px;
+	}
+	.our-services .row {
+		display: flex;
+		flex-direction: column;
 	}
 	.our-services .col-sm-4:nth-child(4), 
 	.our-services .col-sm-4:nth-child(5), 
