@@ -150,6 +150,7 @@ section {
   font-size: 18px;
   font-weight: 300;
   color: #fff;
+  margin-left: 14%;
 }
 
 #home-slider .caption h1 {
@@ -158,6 +159,7 @@ section {
   font-weight: 700;
   margin-bottom: 30px;
   display: block;
+  text-align: left;
 }
 
 #home-slider .caption b {
@@ -188,7 +190,7 @@ section {
   background-position: center center;
   background-position-y: -200px;
   background-image: url(../images/header-bg.jpg);
-  min-height: 600px;
+  min-height: 30%;
 }
 
 

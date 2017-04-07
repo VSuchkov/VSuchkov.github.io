@@ -229,6 +229,9 @@
 	.footer-bottom p.pull-right {
 		float: none !important;
 	}
+	.twitter-left-control, .twitter-right-control {
+		bottom: -10%;
+	}
 }
 
 /* XS Portrait */
