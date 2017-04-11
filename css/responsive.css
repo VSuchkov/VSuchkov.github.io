@@ -35,6 +35,10 @@
 		background-size: cover;
 		min-height: 785px;
 	}
+	.navbar-brand h1 {
+    	margin-top: 49px;
+    	margin-left: -35px;
+	}
 }
 
 /* xs */
@@ -243,6 +247,26 @@
 	.blog-posts .col-sm-4 {
 		width:100%;
 		float: none;
+	}
+	.carousel-fade .carousel-inner .item {
+		min-height: 885px;
+		background-size: cover;
+		background-position-y: -200px;
+		background-position-x: -350px;
+
+	}
+	#home-slider .caption {
+		margin-left: 20px;
+	}
+	.row-team {
+		flex-direction: column;
+		align-items: center;
+	}
+	.team-members-item {
+		width: 60%;
+	}
+	.team-member-next img {
+		transform: rotate(90deg);
 	}
 }
 
