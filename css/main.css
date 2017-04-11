@@ -473,7 +473,7 @@ section {
 
 .folio-image img {
   width: 100%;
-  height: 242px;
+  height: 100%;
 }
 
 .map {
