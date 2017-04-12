@@ -256,7 +256,7 @@
 
 	}
 	#home-slider .caption {
-		margin-left: 20px;
+		margin-left: 5px;
 	}
 	.row-team {
 		flex-direction: column;
@@ -267,6 +267,9 @@
 	}
 	.team-member-next img {
 		transform: rotate(90deg);
+	}
+	.btn-start {
+		margin-left: 110px;
 	}
 }
 
